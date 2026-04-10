@@ -16,7 +16,54 @@ $result = mysqli_query($koneksi, $query);
 if (!$result) {
     die("Query Error: " . mysqli_error($conn));
 }
+// Handle update from modal
+if (isset($_POST['update'])) {
+    $id = intval($_POST['id']);
+    $sarana = trim($_POST['sarana']);
+    $deskripsi = trim($_POST['deskripsi']);
+    $status = trim($_POST['status']);
+    $progress_persen = intval($_POST['progress_persen']);
+    $tanggal_mulai = trim($_POST['tanggal_mulai']);
+    $tanggal_selesai = trim($_POST['tanggal_selesai']);
 
+    $sarana = mysqli_real_escape_string($koneksi, $sarana);
+    $deskripsi = mysqli_real_escape_string($koneksi, $deskripsi);
+    $status = mysqli_real_escape_string($koneksi, $status);
+    $tanggal_mulai = mysqli_real_escape_string($koneksi, $tanggal_mulai);
+    $tanggal_selesai = $tanggal_selesai === '' ? "NULL" : "'" . mysqli_real_escape_string($koneksi, $tanggal_selesai) . "'";
+
+    $update_query = "UPDATE data_aspirasi SET 
+        sarana='$sarana',
+        deskripsi='$deskripsi',
+        status='$status',
+        progress_persen=$progress_persen,
+        tanggal_mulai='$tanggal_mulai',
+        tanggal_selesai=$tanggal_selesai
+        WHERE id_aspirasi='$id'";
+
+    mysqli_query($koneksi, $update_query);
+    header("Location: dashboard.php");
+    exit;
+}
+
+// Handle reply from modal
+if (isset($_POST['reply'])) {
+    $id = intval($_POST['id']);
+    $balasan_admin = trim($_POST['balasan_admin']);
+    $status = trim($_POST['status']);
+
+    $balasan_admin = mysqli_real_escape_string($koneksi, $balasan_admin);
+    $status = mysqli_real_escape_string($koneksi, $status);
+
+    $update_query = "UPDATE data_aspirasi SET 
+        balasan_admin='$balasan_admin',
+        status='$status'
+        WHERE id_aspirasi='$id'";
+
+    mysqli_query($koneksi, $update_query);
+    header("Location: dashboard.php");
+    exit;
+}
 // Statistik
 $total = mysqli_num_rows($result);
 $selesai = mysqli_num_rows(mysqli_query($koneksi, "SELECT * FROM data_aspirasi WHERE status='selesai'"));
@@ -31,6 +78,7 @@ $rencana = mysqli_num_rows(mysqli_query($koneksi, "SELECT * FROM data_aspirasi W
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard Admin</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 
 <style>
@@ -303,14 +351,23 @@ body {
                             <td><?= $row['tanggal_mulai'] ?></td>
                             <td><?= $row['tanggal_selesai'] ?? '-' ?></td>
                             <td class="px-3 py-2 space-x-2">
-                                <a href="edit-aspirasi.php?id=<?= $row['id_aspirasi'] ?>"
-                                   class="inline-block rounded-lg bg-blue-500 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-600 transition">
-                                    Edit
-                                </a>
+                                <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#detailModal" 
+                                        data-id="<?= $row['id_aspirasi'] ?>" data-sarana="<?= htmlspecialchars($row['sarana']) ?>" 
+                                        data-deskripsi="<?= htmlspecialchars($row['deskripsi']) ?>" data-status="<?= $row['status'] ?>" 
+                                        data-balasan="<?= htmlspecialchars($row['balasan_admin'] ?? '') ?>">
+                                    <i class="bi bi-eye"></i> Detail
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editModal" 
+                                        data-id="<?= $row['id_aspirasi'] ?>" data-sarana="<?= htmlspecialchars($row['sarana']) ?>" 
+                                        data-deskripsi="<?= htmlspecialchars($row['deskripsi']) ?>" data-status="<?= $row['status'] ?>" 
+                                        data-progress="<?= $row['progress_persen'] ?>" data-tanggal_mulai="<?= $row['tanggal_mulai'] ?>" 
+                                        data-tanggal_selesai="<?= $row['tanggal_selesai'] ?? '' ?>">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
                                 <a href="hapus.php?id=<?= $row['id_aspirasi'] ?>"
                                    onclick="return confirm('Yakin ingin menghapus data ini?')"
-                                   class="inline-block rounded-lg bg-red-500 px-3 py-1 text-xs font-semibold text-white hover:bg-red-600 transition">
-                                    Hapus
+                                   class="btn btn-danger btn-sm">
+                                    <i class="bi bi-trash"></i> Hapus
                                 </a>
                             </td>
 
@@ -327,13 +384,142 @@ body {
 
 </div>
 
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">Edit Aspirasi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editForm" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="editId">
+                    <div class="mb-3">
+                        <label for="editSarana" class="form-label">Sarana</label>
+                        <input type="text" class="form-control" id="editSarana" name="sarana" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editDeskripsi" class="form-label">Deskripsi</label>
+                        <textarea class="form-control" id="editDeskripsi" name="deskripsi" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editStatus" class="form-label">Status</label>
+                        <select class="form-select" id="editStatus" name="status" required>
+                            <option value="direncanakan">Direncanakan</option>
+                            <option value="diproses">Diproses</option>
+                            <option value="selesai">Selesai</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editProgress" class="form-label">Progress (%)</label>
+                        <input type="number" class="form-control" id="editProgress" name="progress_persen" min="0" max="100" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTanggalMulai" class="form-label">Tanggal Mulai</label>
+                        <input type="date" class="form-control" id="editTanggalMulai" name="tanggal_mulai" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTanggalSelesai" class="form-label">Tanggal Selesai</label>
+                        <input type="date" class="form-control" id="editTanggalSelesai" name="tanggal_selesai">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" name="update" class="btn btn-primary">Simpan Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-labelledby="detailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailModalLabel">Detail Aspirasi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="detailForm" method="post">
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="detailId">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Sarana:</label>
+                        <p id="detailSarana"></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Deskripsi Siswa:</label>
+                        <p id="detailDeskripsi"></p>
+                    </div>
+                    <div class="mb-3">
+                        <label for="detailBalasan" class="form-label fw-bold">Balasan Admin:</label>
+                        <textarea class="form-control" id="detailBalasan" name="balasan_admin" rows="3" placeholder="Masukkan balasan untuk siswa..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="detailStatus" class="form-label fw-bold">Status:</label>
+                        <select class="form-select" id="detailStatus" name="status" required>
+                            <option value="direncanakan">Direncanakan</option>
+                            <option value="diproses">Diproses</option>
+                            <option value="selesai">Selesai</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                    <button type="submit" name="reply" class="btn btn-success">Kirim Balasan & Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 // Mobile menu toggle
 document.getElementById('mobile-menu-button').addEventListener('click', function() {
     const mobileMenu = document.getElementById('mobile-menu');
     mobileMenu.classList.toggle('hidden');
 });
+
+// Edit Modal
+const editModal = document.getElementById('editModal');
+editModal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const id = button.getAttribute('data-id');
+    const sarana = button.getAttribute('data-sarana');
+    const deskripsi = button.getAttribute('data-deskripsi');
+    const status = button.getAttribute('data-status');
+    const progress = button.getAttribute('data-progress');
+    const tanggalMulai = button.getAttribute('data-tanggal_mulai');
+    const tanggalSelesai = button.getAttribute('data-tanggal_selesai');
+
+    document.getElementById('editId').value = id;
+    document.getElementById('editSarana').value = sarana;
+    document.getElementById('editDeskripsi').value = deskripsi;
+    document.getElementById('editStatus').value = status;
+    document.getElementById('editProgress').value = progress;
+    document.getElementById('editTanggalMulai').value = tanggalMulai;
+    document.getElementById('editTanggalSelesai').value = tanggalSelesai;
+});
+
+// Detail Modal
+const detailModal = document.getElementById('detailModal');
+detailModal.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    const id = button.getAttribute('data-id');
+    const sarana = button.getAttribute('data-sarana');
+    const deskripsi = button.getAttribute('data-deskripsi');
+    const status = button.getAttribute('data-status');
+    const balasan = button.getAttribute('data-balasan');
+
+    document.getElementById('detailId').value = id;
+    document.getElementById('detailSarana').textContent = sarana;
+    document.getElementById('detailDeskripsi').textContent = deskripsi;
+    document.getElementById('detailBalasan').value = balasan;
+    document.getElementById('detailStatus').value = status;
+});
 </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>
 </html>
