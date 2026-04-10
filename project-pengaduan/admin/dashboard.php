@@ -13,6 +13,7 @@ $query = "SELECT * FROM data_aspirasi ORDER BY created_at DESC";
 $result = mysqli_query($koneksi, $query);
 
 
+
 if (!$result) {
     die("Query Error: " . mysqli_error($conn));
 }
@@ -26,43 +27,58 @@ if (isset($_POST['update'])) {
     $tanggal_mulai = trim($_POST['tanggal_mulai']);
     $tanggal_selesai = trim($_POST['tanggal_selesai']);
 
-    $sarana = mysqli_real_escape_string($koneksi, $sarana);
-    $deskripsi = mysqli_real_escape_string($koneksi, $deskripsi);
-    $status = mysqli_real_escape_string($koneksi, $status);
-    $tanggal_mulai = mysqli_real_escape_string($koneksi, $tanggal_mulai);
-    $tanggal_selesai = $tanggal_selesai === '' ? "NULL" : "'" . mysqli_real_escape_string($koneksi, $tanggal_selesai) . "'";
+    // Escape strings
+    $sarana_esc = mysqli_real_escape_string($koneksi, $sarana);
+    $status_esc = mysqli_real_escape_string($koneksi, $status);
+    $admin_nama = $_SESSION['nama'] ?? 'Admin'; // Ambil nama admin dari session
 
     $update_query = "UPDATE data_aspirasi SET 
-        sarana='$sarana',
-        deskripsi='$deskripsi',
-        status='$status',
+        sarana='$sarana_esc',
+        deskripsi='".mysqli_real_escape_string($koneksi, $deskripsi)."',
+        status='$status_esc',
         progress_persen=$progress_persen,
-        tanggal_mulai='$tanggal_mulai',
-        tanggal_selesai=$tanggal_selesai
+        tanggal_mulai='".mysqli_real_escape_string($koneksi, $tanggal_mulai)."',
+        tanggal_selesai=".($tanggal_selesai === '' ? "NULL" : "'" . mysqli_real_escape_string($koneksi, $tanggal_selesai) . "'")."
         WHERE id_aspirasi='$id'";
 
-    mysqli_query($koneksi, $update_query);
-    header("Location: dashboard.php");
-    exit;
+    if (mysqli_query($koneksi, $update_query)) {
+        // --- TAMBAHKAN LOG KE HISTORY ---
+        $aksi = "mengubah data sarana menjadi '$sarana' dengan status $status";
+        $log_query = "INSERT INTO history_admin (id_aspirasi, aksi, dilakukan_oleh) 
+                      VALUES ('$id', '$aksi', '$admin_nama')";
+        mysqli_query($koneksi, $log_query);
+        // --------------------------------
+
+        header("Location: dashboard.php?msg=updated");
+        exit;
+    }
 }
 
-// Handle reply from modal
 if (isset($_POST['reply'])) {
     $id = intval($_POST['id']);
     $balasan_admin = trim($_POST['balasan_admin']);
     $status = trim($_POST['status']);
+    $admin_nama = $_SESSION['nama'] ?? 'Admin';
 
-    $balasan_admin = mysqli_real_escape_string($koneksi, $balasan_admin);
-    $status = mysqli_real_escape_string($koneksi, $status);
+    $balasan_esc = mysqli_real_escape_string($koneksi, $balasan_admin);
+    $status_esc = mysqli_real_escape_string($koneksi, $status);
 
     $update_query = "UPDATE data_aspirasi SET 
-        balasan_admin='$balasan_admin',
-        status='$status'
+        balasan_admin='$balasan_esc',
+        status='$status_esc'
         WHERE id_aspirasi='$id'";
 
-    mysqli_query($koneksi, $update_query);
-    header("Location: dashboard.php");
-    exit;
+    if (mysqli_query($koneksi, $update_query)) {
+        // --- TAMBAHKAN LOG KE HISTORY ---
+        $aksi = "memberikan tanggapan/balasan dan mengubah status menjadi $status";
+        $log_query = "INSERT INTO history_admin (id_aspirasi, aksi, dilakukan_oleh) 
+                      VALUES ('$id', '$aksi', '$admin_nama')";
+        mysqli_query($koneksi, $log_query);
+        // --------------------------------
+
+        header("Location: dashboard.php?msg=replied");
+        exit;
+    }
 }
 // Statistik
 $total = mysqli_num_rows($result);
@@ -308,72 +324,82 @@ body {
                         </tr>
                     </thead>
 
-                    <tbody>
-                        <?php $no = 1; mysqli_data_seek($result, 0); while ($row = mysqli_fetch_assoc($result)) : ?>
-                        <tr class="border-t hover:bg-orange-50 transition">
+     <tbody>
+    <?php $no = 1; mysqli_data_seek($result, 0); while ($row = mysqli_fetch_assoc($result)) : ?>
+    <tr class="border-t hover:bg-orange-50 transition">
+        <td class="px-3 py-2 text-gray-400"><?= $no++ ?></td>
+        <td class="font-bold text-gray-700"><?= htmlspecialchars($row['sarana']) ?></td>
+        <td class="text-gray-500 max-w-xs truncate"><?= htmlspecialchars($row['deskripsi']) ?></td>
+        
+        <td class="text-center py-2">
+            <?php if (!empty($row['gambar'])): ?>
+                <img src="../img/<?= htmlspecialchars($row['gambar']) ?>" 
+                     class="w-12 h-12 object-cover rounded-lg mx-auto shadow-sm cursor-zoom-in" 
+                     onclick="window.open('../img/<?= htmlspecialchars($row['gambar']) ?>', '_blank')">
+            <?php else: ?>
+                <span class="text-gray-300 italic text-xs">No Image</span>
+            <?php endif; ?>
+        </td>
 
-                            <td class="px-3 py-2"><?= $no++ ?></td>
-                            <td class="font-semibold"><?= htmlspecialchars($row['sarana']) ?></td>
-                            <td class="text-gray-500"><?= htmlspecialchars($row['deskripsi']) ?></td>
-                            
-                            <td class="text-center py-2">
-                                <?php if (!empty($row['gambar'])): ?>
-                                    <img src="../img/<?= htmlspecialchars($row['gambar']) ?>" alt="Gambar" class="w-14 h-14 object-cover rounded-lg cursor-pointer hover:opacity-75 transition" onclick="window.open('../img/<?= htmlspecialchars($row['gambar']) ?>', '_blank')">
-                                <?php else: ?>
-                                    <span class="text-gray-400 text-xs">Tidak ada</span>
-                                <?php endif; ?>
-                            </td>
+        <td>
+            <?php 
+            $s = $row['status'] ?? '';
+            $badge = ($s == 'selesai') ? 'bg-green-100 text-green-600' : (($s == 'diproses') ? 'bg-blue-100 text-blue-600' : 'bg-yellow-100 text-yellow-600');
+            ?>
+            <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase <?= $badge ?>">
+                <?= ucfirst($s) ?>
+            </span>
+        </td>
 
-                            <!-- STATUS -->
-                            <td>
-                                <?php if ($row['status'] == 'selesai'): ?>
-                                    <span class="px-3 py-1 text-xs rounded-full bg-green-100 text-green-700">Selesai</span>
-                                <?php elseif ($row['status'] == 'diproses'): ?>
-                                    <span class="px-3 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Diproses</span>
-                                <?php else: ?>
-                                    <span class="px-3 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700">Direncanakan</span>
-                                <?php endif; ?>
-                            </td>
+        <td class="w-44">
+            <div class="flex items-center gap-3">
+                <div class="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div class="h-full bg-orange-500 rounded-full" style="width: <?= $row['progress_persen'] ?? 0 ?>%"></div>
+                </div>
+                <span class="text-[11px] font-bold text-orange-600"><?= $row['progress_persen'] ?? 0 ?>%</span>
+            </div>
+        </td>
 
-                            <!-- PROGRESS -->
-                            <td class="w-40">
-                                <div class="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                                    <div class="h-full rounded-full transition-all duration-700"
-                                        style="width: <?= intval($row['progress_persen']) ?>%;
-                                        background: linear-gradient(90deg, #f97316, #fb923c);">
-                                    </div>
-                                </div>
-                                <span class="text-xs text-orange-500">
-                                    <?= intval($row['progress_persen']) ?>%
-                                </span>
-                            </td>
+        <td class="text-gray-500 text-xs"><?= $row['tanggal_mulai'] ?></td>
+        <td class="text-gray-500 text-xs"><?= $row['tanggal_selesai'] ?? '-' ?></td>
 
-                            <td><?= $row['tanggal_mulai'] ?></td>
-                            <td><?= $row['tanggal_selesai'] ?? '-' ?></td>
-                            <td class="px-3 py-2 space-x-2">
-                                <button type="button" class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#detailModal" 
-                                        data-id="<?= $row['id_aspirasi'] ?>" data-sarana="<?= htmlspecialchars($row['sarana']) ?>" 
-                                        data-deskripsi="<?= htmlspecialchars($row['deskripsi']) ?>" data-status="<?= $row['status'] ?>" 
-                                        data-balasan="<?= htmlspecialchars($row['balasan_admin'] ?? '') ?>">
-                                    <i class="bi bi-eye"></i> Detail
-                                </button>
-                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editModal" 
-                                        data-id="<?= $row['id_aspirasi'] ?>" data-sarana="<?= htmlspecialchars($row['sarana']) ?>" 
-                                        data-deskripsi="<?= htmlspecialchars($row['deskripsi']) ?>" data-status="<?= $row['status'] ?>" 
-                                        data-progress="<?= $row['progress_persen'] ?>" data-tanggal_mulai="<?= $row['tanggal_mulai'] ?>" 
-                                        data-tanggal_selesai="<?= $row['tanggal_selesai'] ?? '' ?>">
-                                    <i class="bi bi-pencil"></i> Edit
-                                </button>
-                                <a href="hapus.php?id=<?= $row['id_aspirasi'] ?>"
-                                   onclick="return confirm('Yakin ingin menghapus data ini?')"
-                                   class="btn btn-danger btn-sm">
-                                    <i class="bi bi-trash"></i> Hapus
-                                </a>
-                            </td>
+        <td class="px-3 py-2">
+            <div class="flex justify-center gap-2">
+                <button type="button" 
+                        class="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-500 hover:text-white transition"
+                        data-bs-toggle="modal" 
+                        data-bs-target="#modalBalasAdmin"
+                        data-id="<?= $row['id_aspirasi'] ?>"
+                        data-sarana="<?= htmlspecialchars($row['sarana']) ?>"
+                        data-deskripsi="<?= htmlspecialchars($row['deskripsi']) ?>"
+                        data-balasan="<?= htmlspecialchars($row['balasan_admin'] ?? '') ?>"
+                        data-status="<?= $row['status'] ?>"
+                        title="Balas Aspirasi">
+                    <i class="bi bi-chat-dots"></i>
+                </button>
 
-                        </tr>
-                        <?php endwhile; ?>
-                    </tbody>
+                <button type="button" 
+        class="p-2 bg-gray-100 text-gray-500 rounded-lg hover:bg-orange-500 hover:text-white transition"
+        data-bs-toggle="modal" 
+        data-bs-target="#editModal" 
+        data-id="<?= $row['id_aspirasi'] ?>" 
+        data-sarana="<?= htmlspecialchars($row['sarana']) ?>" 
+        data-deskripsi="<?= htmlspecialchars($row['deskripsi']) ?>"  data-status="<?= $row['status'] ?>" data-progress="<?= $row['progress_persen'] ?>"
+        data-tanggal_mulai="<?= $row['tanggal_mulai'] ?>" data-tanggal_selesai="<?= $row['tanggal_selesai'] ?>" title="Edit Progres">
+    <i class="bi bi-pencil-square"></i>
+</button>
+
+                <a href="hapus.php?id=<?= $row['id_aspirasi'] ?>"
+                   onclick="return confirm('Yakin ingin menghapus data ini?')"
+                   class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition"
+                   title="Hapus">
+                    <i class="bi bi-trash"></i>
+                </a>
+            </div>
+        </td>
+    </tr>
+    <?php endwhile; ?>
+</tbody>
 
                 </table>    
             </div>
@@ -399,10 +425,10 @@ body {
                         <label for="editSarana" class="form-label">Sarana</label>
                         <input type="text" class="form-control" id="editSarana" name="sarana" required>
                     </div>
-                    <div class="mb-3">
-                        <label for="editDeskripsi" class="form-label">Deskripsi</label>
-                        <textarea class="form-control" id="editDeskripsi" name="deskripsi" rows="3" required></textarea>
-                    </div>
+                   <div class="mb-3">
+    <label for="editDeskripsi" class="form-label">Deskripsi</label>
+    <textarea class="form-control bg-light" id="editDeskripsi" name="deskripsi" rows="3" readonly></textarea>
+</div>
                     <div class="mb-3">
                         <label for="editStatus" class="form-label">Status</label>
                         <select class="form-select" id="editStatus" name="status" required>
@@ -481,25 +507,38 @@ document.getElementById('mobile-menu-button').addEventListener('click', function
     mobileMenu.classList.toggle('hidden');
 });
 
-// Edit Modal
+// Edit Modal Logic
 const editModal = document.getElementById('editModal');
 editModal.addEventListener('show.bs.modal', function (event) {
     const button = event.relatedTarget;
+    
+    // Ambil semua data dari atribut tombol
     const id = button.getAttribute('data-id');
     const sarana = button.getAttribute('data-sarana');
     const deskripsi = button.getAttribute('data-deskripsi');
     const status = button.getAttribute('data-status');
     const progress = button.getAttribute('data-progress');
-    const tanggalMulai = button.getAttribute('data-tanggal_mulai');
-    const tanggalSelesai = button.getAttribute('data-tanggal_selesai');
+    const tglMulai = button.getAttribute('data-tanggal_mulai');
+    const tglSelesai = button.getAttribute('data-tanggal_selesai');
 
+    // Masukkan ke dalam input modal
     document.getElementById('editId').value = id;
     document.getElementById('editSarana').value = sarana;
-    document.getElementById('editDeskripsi').value = deskripsi;
+    document.getElementById('editDeskripsi').value = deskripsi; // Sekarang akan muncul isi lamanya
     document.getElementById('editStatus').value = status;
     document.getElementById('editProgress').value = progress;
-    document.getElementById('editTanggalMulai').value = tanggalMulai;
-    document.getElementById('editTanggalSelesai').value = tanggalSelesai;
+    document.getElementById('editTanggalMulai').value = tglMulai;
+    document.getElementById('editTanggalSelesai').value = tglSelesai;
+});
+
+// Modal Balas Admin Logic
+const modalBalasAdmin = document.getElementById('modalBalasAdmin');
+modalBalasAdmin.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    document.getElementById('admin_id_aspirasi').value = button.getAttribute('data-id');
+    document.getElementById('admin_show_deskripsi').innerText = button.getAttribute('data-deskripsi');
+    document.getElementById('admin_input_balasan').value = button.getAttribute('data-balasan');
+    document.getElementById('admin_input_status').value = button.getAttribute('data-status');
 });
 
 // Detail Modal
@@ -517,6 +556,52 @@ detailModal.addEventListener('show.bs.modal', function (event) {
     document.getElementById('detailDeskripsi').textContent = deskripsi;
     document.getElementById('detailBalasan').value = balasan;
     document.getElementById('detailStatus').value = status;
+});
+</script>
+<div class="modal fade" id="modalBalasAdmin" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Berikan Tanggapan Admin</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="proses-balas-admin.php" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="id_aspirasi" id="admin_id_aspirasi">
+                    <div class="mb-3">
+                        
+                        <p id="admin_show_deskripsi" class="p-3 bg-light rounded text-muted"></p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Balasan Anda:</label>
+                        <textarea class="form-control" name="balasan_admin" id="admin_input_balasan" rows="4" placeholder="Ketik jawaban resmi..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Update Status:</label>
+                        <select class="form-select" name="status" id="admin_input_status">
+                            <option value="direncanakan">Direncanakan</option>
+                            <option value="diproses">Diproses</option>
+                            <option value="selesai">Selesai</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" name="submit_balas" class="btn btn-success w-100">Kirim & Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Script untuk memasukkan data ke modal admin saat diklik
+const modalBalasAdmin = document.getElementById('modalBalasAdmin');
+modalBalasAdmin.addEventListener('show.bs.modal', function (event) {
+    const button = event.relatedTarget;
+    document.getElementById('admin_id_aspirasi').value = button.getAttribute('data-id');
+    document.getElementById('admin_show_deskripsi').innerText = button.getAttribute('data-deskripsi');
+    document.getElementById('admin_input_balasan').value = button.getAttribute('data-balasan');
+    document.getElementById('admin_input_status').value = button.getAttribute('data-status');
 });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

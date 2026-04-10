@@ -7,7 +7,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== "admin") {
     exit;
 }
 
-$query = mysqli_query($koneksi, "SELECT * FROM users ORDER BY nama ASC");
+$query = mysqli_query($koneksi, "SELECT * FROM users WHERE role = 'siswa' ORDER BY nama ASC");
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -229,12 +229,8 @@ body {
 
                             <!-- ROLE BADGE -->
                             <td>
-                                <?php if ($row['role'] == 'admin'): ?>
-                                    <span class="px-3 py-1 text-xs rounded-full bg-blue-100 text-blue-700">Admin</span>
-                                <?php else: ?>
-                                    <span class="px-3 py-1 text-xs rounded-full bg-green-100 text-green-700">Siswa</span>
-                                <?php endif; ?>
-                            </td>
+    <span class="px-3 py-1 text-xs rounded-full bg-green-100 text-green-700">Siswa</span>
+</td>
 
                             <!-- AKSI -->
                             <td class="text-center">
